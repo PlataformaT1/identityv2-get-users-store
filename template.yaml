@@ -1,0 +1,216 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Aplicación Serverless que se integra con infraestructura existente
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, test, stage, prod]
+    Description: Entorno de despliegue
+
+  MongoDbUri:
+    Type: String
+    NoEcho: true
+    Description: URI de conexión a MongoDB Atlas
+
+  DatabaseName:
+    Type: String
+    Default: sampledb
+    Description: Nombre de la base de datos MongoDB
+
+  CollectionName:
+    Type: String
+    Default: samples
+    Description: Nombre de la colección MongoDB
+
+  ApiGatewayType:
+    Type: String
+    Default: http
+    AllowedValues: [http, rest]
+    Description: Tipo de API Gateway existente
+
+  ExistingApiId:
+    Type: String
+    Description: ID de la API Gateway existente
+
+  ExistingApiStageName:
+    Type: String
+    Default: dev
+    Description: Nombre del stage de la API Gateway existente
+
+  ExistingVpcId:
+    Type: String
+    Description: ID de la VPC existente
+
+  ExistingSubnetIds:
+    Type: CommaDelimitedList
+    Description: Lista separada por comas de IDs de subredes existentes
+
+  ExistingSecurityGroupId:
+    Type: String
+    Description: ID del grupo de seguridad existente
+
+  ExistingLayerArn:
+    Type: String
+    Description: ARN de la capa (layer) existente con las dependencias
+
+  # Nuevo parámetro para el rootresourceid
+  RootResourceId:
+    Type: String
+    Default: ""
+    Description: ID del recurso raíz de la API Gateway (solo para REST API)
+
+Resources:
+  # Secreto para MongoDB
+  MongoDBSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '${AWS::StackName}-mongodb-${Environment}'
+      Description: Credenciales de MongoDB
+      SecretString: !Sub '{"uri": "${MongoDbUri}"}'
+
+  # Función Lambda (sin eventos API Gateway)
+  GetListUserByStoreFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-${Environment}'
+      CodeUri: app/ #aqui va el nombre de la carpeta que contenga app.py
+      Handler: app.lambda_handler
+      Runtime: python3.11
+      Architectures: [x86_64]
+      MemorySize: 256
+      Timeout: 10
+      Environment:
+        Variables:
+          MONGODB_SECRET_ARN: !Ref MongoDBSecret
+          DB_NAME: !Ref DatabaseName
+          COLLECTION_NAME: !Ref CollectionName
+          ENVIRONMENT: !Ref Environment
+          LOG_LEVEL: INFO
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref ExistingSecurityGroupId
+        SubnetIds: !Ref ExistingSubnetIds
+      Layers:
+        - !Ref ExistingLayerArn
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - ec2:CreateNetworkInterface
+                - ec2:DescribeNetworkInterfaces
+                - ec2:DeleteNetworkInterface
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+                - secretsmanager:DescribeSecret
+              Resource: !Ref MongoDBSecret
+
+  # Grupo de logs para Lambda
+  GetListUserByStoreFunctionLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${GetListUserByStoreFunction}'
+      RetentionInDays: 7
+
+  # Integración con API Gateway HTTP existente
+  ApiGatewayIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Condition: IsHttpApi
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ApiId: !Ref ExistingApiId
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetListUserByStoreFunction.Arn}/invocations'
+      PayloadFormatVersion: '2.0'
+      IntegrationMethod: POST
+
+  # Ruta para API Gateway HTTP
+  ApiGatewayRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Condition: IsHttpApi
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      ApiId: !Ref ExistingApiId
+      RouteKey: 'GET /hello'
+      Target: !Sub 'integrations/${ApiGatewayIntegration}'
+
+  # Permiso para que API Gateway HTTP invoque la función Lambda
+  ApiGatewayHttpPermission:
+    Type: AWS::Lambda::Permission
+    Condition: IsHttpApi
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref GetListUserByStoreFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/*/*/hello'
+
+  # RECURSOS PARA API REST
+
+  # Recurso /hello para API REST
+  ApiGatewayRestResource:
+    Type: AWS::ApiGateway::Resource
+    Condition: IsRestApi
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RestApiId: !Ref ExistingApiId
+      ParentId: !Ref RootResourceId
+      PathPart: 'hello'
+
+  # Método GET para el recurso /hello en API REST
+  ApiGatewayRestMethod:
+    Type: AWS::ApiGateway::Method
+    Condition: IsRestApi
+    Properties:
+      RestApiId: !Ref ExistingApiId
+      ResourceId: !Ref ApiGatewayRestResource
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${GetListUserByStoreFunction.Arn}/invocations'
+
+  # Permiso para que API Gateway REST invoque la función Lambda
+  ApiGatewayRestPermission:
+    Type: AWS::Lambda::Permission
+    Condition: IsRestApi
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref GetListUserByStoreFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/${ExistingApiStageName}/GET/hello'
+
+  # Despliegue de API REST para aplicar cambios
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Condition: IsRestApi
+    DependsOn: ApiGatewayRestMethod
+    Properties:
+      RestApiId: !Ref ExistingApiId
+      StageName: !Ref ExistingApiStageName
+      Description: !Sub 'Deployment for ${AWS::StackName}'
+
+Conditions:
+  IsHttpApi: !Equals [!Ref ApiGatewayType, "http"]
+  IsRestApi: !Equals [!Ref ApiGatewayType, "rest"]
+
+Outputs:
+  GetListUserByStoreFunction:
+    Description: ARN de la función Lambda
+    Value: !GetAtt GetListUserByStoreFunction.Arn
+
+  ApiEndpoint:
+    Description: URL del endpoint
+    Value: !If
+      - IsHttpApi
+      - !Sub 'https://${ExistingApiId}.execute-api.${AWS::Region}.amazonaws.com/${ExistingApiStageName}/hello'
+      - !Sub 'https://${ExistingApiId}.execute-api.${AWS::Region}.amazonaws.com/${ExistingApiStageName}/hello'
