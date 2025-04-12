@@ -137,7 +137,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       ApiId: !Ref ExistingApiId
-      RouteKey: 'GET /identity/v1/hello'
+      RouteKey: 'GET /identity/v2/hello'
       Target: !Sub 'integrations/${ApiGatewayIntegration}'
 
   # Permiso para que API Gateway HTTP invoque la función Lambda
@@ -148,11 +148,11 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref GetListUserByStoreFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/*/*/identity/v1/hello'
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/*/*/hello'
 
   # RECURSOS PARA API REST
 
-  # Recurso /identity/v1/hello para API REST
+  # Recurso /hello para API REST
   ApiGatewayRestResource:
     Type: AWS::ApiGateway::Resource
     Condition: IsRestApi
@@ -161,9 +161,9 @@ Resources:
     Properties:
       RestApiId: !Ref ExistingApiId
       ParentId: !Ref RootResourceId
-      PathPart: 'identity/v1/hello'
+      PathPart: 'hello'
 
-  # Método GET para el recurso /identity/v1/hello en API REST
+  # Método GET para el recurso /hello en API REST
   ApiGatewayRestMethod:
     Type: AWS::ApiGateway::Method
     Condition: IsRestApi
@@ -187,7 +187,7 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref GetListUserByStoreFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/${ExistingApiStageName}/GET/identity/v1/hello'
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/${ExistingApiStageName}/GET/hello'
 
   # Despliegue de API REST para aplicar cambios
   ApiGatewayDeployment:
@@ -212,5 +212,5 @@ Outputs:
     Description: URL del endpoint
     Value: !If
       - IsHttpApi
-      - !Sub 'https://${ExistingApiId}.execute-api.${AWS::Region}.amazonaws.com/${ExistingApiStageName}/identity/v1/hello'
-      - !Sub 'https://${ExistingApiId}.execute-api.${AWS::Region}.amazonaws.com/${ExistingApiStageName}/identity/v1/hello'
+      - !Sub 'https://${ExistingApiId}.execute-api.${AWS::Region}.amazonaws.com/${ExistingApiStageName}/identity/v2/hello'
+      - !Sub 'https://${ExistingApiId}.execute-api.${AWS::Region}.amazonaws.com/${ExistingApiStageName}/identity/v2/hello'
