@@ -148,7 +148,7 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref GetListUserByStoreFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/*/*/hello'
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/*/*/identity/v2/hello'
 
   # RECURSOS PARA API REST
 
@@ -187,7 +187,7 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref GetListUserByStoreFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/${ExistingApiStageName}/GET/hello'
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/${ExistingApiStageName}/GET/identity/v2/hello'
 
   # Despliegue de API REST para aplicar cambios
   ApiGatewayDeployment:
