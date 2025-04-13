@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: Aplicación Serverless que se integra con infraestructura existente
+Description: Aplicación Serverless para el listado de usuarios por tienda
 
 Parameters:
   Environment:
@@ -137,7 +137,7 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       ApiId: !Ref ExistingApiId
-      RouteKey: 'GET /identity/v2/hello'
+      RouteKey: 'GET /identity/v2/store_members/{id}'
       Target: !Sub 'integrations/${ApiGatewayIntegration}'
 
   # Permiso para que API Gateway HTTP invoque la función Lambda
@@ -148,7 +148,7 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref GetListUserByStoreFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/*/*/hello'
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/*/*/identity/v2/store_members/{id}'
 
   # RECURSOS PARA API REST
 
@@ -161,7 +161,17 @@ Resources:
     Properties:
       RestApiId: !Ref ExistingApiId
       ParentId: !Ref RootResourceId
-      PathPart: 'hello'
+      PathPart: 'store_members'
+
+  ApiGatewayRestResourceId:
+    Type: AWS::ApiGateway::Resource
+    Condition: IsRestApi
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      RestApiId: !Ref ExistingApiId
+      ParentId: !Ref ApiGatewayRestResource
+      PathPart: '{id}'
 
   # Método GET para el recurso /hello en API REST
   ApiGatewayRestMethod:
@@ -169,7 +179,7 @@ Resources:
     Condition: IsRestApi
     Properties:
       RestApiId: !Ref ExistingApiId
-      ResourceId: !Ref ApiGatewayRestResource
+      ResourceId: !Ref ApiGatewayRestResourceId
       HttpMethod: GET
       AuthorizationType: NONE
       Integration:
@@ -187,7 +197,7 @@ Resources:
       Action: lambda:InvokeFunction
       FunctionName: !Ref GetListUserByStoreFunction
       Principal: apigateway.amazonaws.com
-      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/${ExistingApiStageName}/GET/identity/v2/hello'
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ExistingApiId}/${ExistingApiStageName}/GET/identity/v2/store_members/{id}'
 
   # Despliegue de API REST para aplicar cambios
   ApiGatewayDeployment:
@@ -212,5 +222,5 @@ Outputs:
     Description: URL del endpoint
     Value: !If
       - IsHttpApi
-      - !Sub 'https://${ExistingApiId}.execute-api.${AWS::Region}.amazonaws.com/${ExistingApiStageName}/identity/v2/hello'
-      - !Sub 'https://${ExistingApiId}.execute-api.${AWS::Region}.amazonaws.com/${ExistingApiStageName}/identity/v2/hello'
+      - !Sub 'https://${ExistingApiId}.execute-api.${AWS::Region}.amazonaws.com/${ExistingApiStageName}/identity/v2/store_members/{id}'
+      - !Sub 'https://${ExistingApiId}.execute-api.${AWS::Region}.amazonaws.com/${ExistingApiStageName}/identity/v2/store_members/{id}'
