@@ -12,17 +12,17 @@ Parameters:
   MongoDbUri:
     Type: String
     NoEcho: true
-    Description: URI de conexión a MongoDB Atlas
+    Description: URI de conexión a DocumentDB Atlas
 
   DatabaseName:
     Type: String
     Default: sampledb
-    Description: Nombre de la base de datos MongoDB
+    Description: Nombre de la base de datos DocumentDB
 
   CollectionName:
     Type: String
     Default: samples
-    Description: Nombre de la colección MongoDB
+    Description: Nombre de la colección DocumentDB
 
   ApiGatewayType:
     Type: String
@@ -62,12 +62,12 @@ Parameters:
     Description: ID del recurso raíz de la API Gateway (solo para REST API)
 
 Resources:
-  # Secreto para MongoDB
-  MongoDBSecret:
+  # Secreto para DocumentDB
+  DocumentDBSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Name: !Sub '${AWS::StackName}-mongodb-${Environment}'
-      Description: Credenciales de MongoDB
+      Name: !Sub '${AWS::StackName}-documentdb-${Environment}'
+      Description: Credenciales de DocumentDB
       SecretString: !Sub '{"uri": "${MongoDbUri}"}'
 
   # Función Lambda (sin eventos API Gateway)
@@ -83,7 +83,7 @@ Resources:
       Timeout: 10
       Environment:
         Variables:
-          MONGODB_SECRET_ARN: !Ref MongoDBSecret
+          MONGODB_SECRET_ARN: !Ref DocumentDBSecret
           DB_NAME: !Ref DatabaseName
           COLLECTION_NAME: !Ref CollectionName
           ENVIRONMENT: !Ref Environment
@@ -107,7 +107,7 @@ Resources:
               Action:
                 - secretsmanager:GetSecretValue
                 - secretsmanager:DescribeSecret
-              Resource: !Ref MongoDBSecret
+              Resource: !Ref DocumentDBSecret
 
   # Grupo de logs para Lambda
   GetListUserByStoreFunctionLogs:
